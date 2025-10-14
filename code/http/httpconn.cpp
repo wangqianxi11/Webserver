@@ -1,297 +1,592 @@
-/*
- * @Author       : mark
- * @Date         : 2020-06-15
- * @copyleft Apache 2.0
- */ 
 #include "httpconn.h"
+#include <nlohmann/json.hpp>
+#include <iostream>
+
 using namespace std;
 
-const char* HttpConn::srcDir;
+const char *HttpConn::srcDir;
 std::atomic<int> HttpConn::userCount;
 bool HttpConn::isET;
 
-// 构造函数，初始化成员变量
-HttpConn::HttpConn() { 
+HttpConn::HttpConn() : request_(HttpConfig{})
+{
     fd_ = -1;
-    addr_ = { 0 };
+    addr_ = {0};
     isClose_ = true;
     redis_ = std::make_shared<sw::redis::Redis>("tcp://127.0.0.1:6379");
     authService_ = std::make_unique<AuthService>(redis_);
-};
+}
 
-// 析构函数，关闭连接
-HttpConn::~HttpConn() { 
-    Close(); 
-};
+HttpConn::~HttpConn()
+{
+    Close();
+}
 
-
-void HttpConn::init(int fd, const sockaddr_in& addr) {
-    userCount++; // 增加当前用户连接数
-    addr_ = addr; // 传入的客户端地址保存在成员变量
-    fd_ = fd; // 存储传入的文件描述符（socket）
+void HttpConn::init(int fd, const sockaddr_in &addr)
+{
+    userCount++;
+    addr_ = addr;
+    fd_ = fd;
     writeBuff_.RetrieveAll();
-    readBuff_.RetrieveAll(); // 清空读写缓冲区
-    isClose_ = false; // 设置关闭连接标志
+    readBuff_.RetrieveAll();
+    isClose_ = false;
     LOG_INFO("Client[%d](%s:%d) in, userCount:%d", fd_, GetIP(), GetPort(), (int)userCount);
 }
 
-void HttpConn::Close() {
-    // 关闭连接
-    response_.UnmapFile(); // 停止映射
-    if(isClose_ == false){
-        isClose_ = true; // 设置关闭标志
-        userCount--; // 用户连接数-1
-        close(fd_); // 关闭socket
+void HttpConn::Close()
+{
+    response_.UnmapFile();
+    if (!isClose_)
+    {
+        isClose_ = true;
+        userCount--;
+        close(fd_);
         LOG_INFO("Client[%d](%s:%d) quit, UserCount:%d", fd_, GetIP(), GetPort(), (int)userCount);
     }
 }
 
-int HttpConn::GetFd() const {
+int HttpConn::GetFd() const
+{
     return fd_;
-};
+}
 
-struct sockaddr_in HttpConn::GetAddr() const {
+struct sockaddr_in HttpConn::GetAddr() const
+{
     return addr_;
 }
 
-const char* HttpConn::GetIP() const {
+const char *HttpConn::GetIP() const
+{
     return inet_ntoa(addr_.sin_addr);
 }
 
-int HttpConn::GetPort() const {
+int HttpConn::GetPort() const
+{
     return addr_.sin_port;
 }
 
-
-
-ssize_t HttpConn::read(int* saveErrno) {
+ssize_t HttpConn::read(int *saveErrno)
+{
     ssize_t len = 0;
     ssize_t totalLen = 0;
 
-    while (true) {
+    while (true)
+    {
         len = readBuff_.ReadFd(fd_, saveErrno);
-        if (len < 0) {
-            if (*saveErrno == EAGAIN || *saveErrno == EWOULDBLOCK) {
-                break;  // 数据读完，正常退出
+        if (len < 0)
+        {
+            if (*saveErrno == EAGAIN || *saveErrno == EWOULDBLOCK)
+            {
+                break;
             }
-            return -1;  // 出错
-        } else if (len == 0) {
-            break;  // 对端关闭连接
+            return -1;
+        }
+        else if (len == 0)
+        {
+            break;
         }
         totalLen += len;
     }
 
-    if (totalLen > 0) {
-        std::cout << "http连接读取了 " << totalLen << " 字节" << std::endl;
+    if (totalLen > 0)
+    {
+        LOG_DEBUG("Read %zd bytes from client[%d]", totalLen, fd_);
     }
 
     return totalLen;
 }
 
-ssize_t HttpConn::write(int* saveErrno) {
+ssize_t HttpConn::write(int *saveErrno)
+{
     ssize_t len = -1;
-    // do while
-    // ET模式，循环写入，直到数据发送完毕或错误
-    // LT模式，一次写入
-    do {
-        len = writev(fd_, iov_, iovCnt_); // 一次性写入多个缓冲区,iov_[0]存储HTTP头部,iov_[1]存储文件数据
-        if(len <= 0) {
+
+    do
+    {
+        len = writev(fd_, iov_, iovCnt_);
+        if (len <= 0)
+        {
             *saveErrno = errno;
             break;
-        } //
-        if(iov_[0].iov_len + iov_[1].iov_len  == 0) { break; } /* 传输结束 */
-        else if(static_cast<size_t>(len) > iov_[0].iov_len) {
-            // 如果写入的字节数>iov_[0]，调整iov_[1]的指针和长度，
-            iov_[1].iov_base = (uint8_t*) iov_[1].iov_base + (len - iov_[0].iov_len);
+        }
+
+        if (ToWriteBytes() == 0)
+        {
+            break;
+        }
+        else if (static_cast<size_t>(len) > iov_[0].iov_len)
+        {
+            iov_[1].iov_base = static_cast<uint8_t *>(iov_[1].iov_base) + (len - iov_[0].iov_len);
             iov_[1].iov_len -= (len - iov_[0].iov_len);
-            if(iov_[0].iov_len) {
+
+            if (iov_[0].iov_len)
+            {
                 writeBuff_.RetrieveAll();
                 iov_[0].iov_len = 0;
-            } // 全部发送，清空写缓冲区
+            }
         }
-        else {
-            // 只调整iov_[0]的指针和剩余长度
-            iov_[0].iov_base = (uint8_t*)iov_[0].iov_base + len; 
-            iov_[0].iov_len -= len; 
-            writeBuff_.Retrieve(len); // 从写缓冲区移除已发送的数据
+        else
+        {
+            iov_[0].iov_base = static_cast<uint8_t *>(iov_[0].iov_base) + len;
+            iov_[0].iov_len -= len;
+            writeBuff_.Retrieve(len);
         }
-    } while(isET || ToWriteBytes() > 10240);
+    } while (isET || ToWriteBytes() > 10240);
+
     return len;
 }
 
-
-HttpConn::PROCESS_STATE HttpConn::process() {
-    int fd = GetFd(); // 获取客户端socket，fd
-    isJsonResponse = false;
-    // request_.Init(); // HTTP请求初始化
-    if(readBuff_.ReadableBytes() <= 0) {
-        // 连接异常或空请求
-        LOG_INFO("连接异常或空请求");
-        return ERROR;
+HttpConn::PROCESS_STATE HttpConn::process()
+{
+    // 先把 socket 中可读数据读进 readBuff_
+    char buff[4096];
+    for (;;)
+    {
+        ssize_t len = recv(fd_, buff, sizeof(buff), 0);
+        if (len > 0)
+        {
+            readBuff_.Append(buff, len);
+        }
+        else if (len == 0)
+        {
+            // 客户端关闭连接
+            LOG_INFO("Client [%d] closed connection", fd_);
+            return ERROR;
+        }
+        else
+        {
+            if (errno == EAGAIN || errno == EWOULDBLOCK)
+            {
+                // 没有更多数据了
+                break;
+            }
+            LOG_WARN("Recv error from client[%d]: %s", fd_, strerror(errno));
+            return ERROR;
+        }
     }
-    // 解析HTTP请求
-    HttpRequest::PARSE_STATE result = request_.parse(readBuff_, fd);
 
-    if(result == HttpRequest::PARSE_STATE::AGAIN) {
-        // 数据不够，继续监听 EPOLLIN
+    // 解析HTTP请求（可能需要多次）
+    ParseResult result = request_.parse(readBuff_, fd_);
+    if (result.state == ParseResult::AGAIN)
+    {
+        // 数据还不够，等下一次epoll可读再调process()
         return AGAIN;
     }
-    if(result == HttpRequest::PARSE_STATE::ERROR) {
-        response_.Init(srcDir, request_.path(), request_.body(), request_.header(), false, 400);
+    if (result.state == ParseResult::ERROR)
+    {
+        response_ = HttpResponse::CreateErrorResponse(400, "Bad Request", &request_);
         return FINISH;
     }
-    RouteRequest();  // 新增函数：分发逻辑处理
-    // 构造http响应
-    response_.MakeResponse(writeBuff_,isJsonResponse);
-    /* 响应头 */
-    iov_[0].iov_base = const_cast<char*>(writeBuff_.Peek()); 
-    iov_[0].iov_len = writeBuff_.ReadableBytes(); // 响应头和长度
-    iovCnt_ = 1; // 默认只有响应头
 
-    /* 文件 */
-    if(response_.FileLen() > 0  && response_.File()) {
+    // 走到这里说明完整请求已经解析完了，包括body_
+    RouteRequest();
+
+    // 在process()里根据response_统一序列化
+
+    writeBuff_.Clear();
+    response_.MakeResponse(writeBuff_);
+    // 准备响应
+    iov_[0].iov_base = const_cast<char *>(writeBuff_.Peek());
+    iov_[0].iov_len = writeBuff_.ReadableBytes();
+    iovCnt_ = 1;
+
+    if (response_.FileLen() > 0 && response_.File())
+    {
         iov_[1].iov_base = response_.File();
         iov_[1].iov_len = response_.FileLen();
-        iovCnt_ = 2; // 如果有文件，则同时发送响应头和文件
+        iovCnt_ = 2;
     }
-    LOG_INFO("filesize:%d, %d  to %d", response_.FileLen() , iovCnt_, ToWriteBytes());
-    //  当前请求处理完后，准备下一次请求，清空状态
+
+    LOG_DEBUG("Response size: %zu, IOV count: %d, Total bytes: %zu",
+              response_.FileLen(), iovCnt_, ToWriteBytes());
+
+    // 处理完重置 request_ 以便下一次请求
     request_.Init();
     return FINISH;
 }
 
-void HttpConn::RouteRequest() {
-    const auto& method = request_.method();
-    const auto& path = request_.path();
-    cout<<"method:"<<method.c_str()<<endl;
-    cout<<"path:"<<path.c_str()<<endl;
-    if (method == "GET") {
-        if (path.find("/showlist") != std::string::npos) {
-            if (!ExtractLoginFromCookie()) {
-                response_.Init(srcDir, request_.path(), request_.body(), request_.header(), false, 403);
-                response_.SetJsonResponse("请先登录后再查看文件列表", 403);
-                isJsonResponse = true;
-                return;
-            }
-        
-            std::string jsonStr = GetSQLFileListJson(); // 已登录，安全查询
-            response_.SetJsonResponse(jsonStr, 200);    // 返回 JSON 列表
-            isJsonResponse = true;
-            isJsonResponse = true;
-        }else if (path.find("/logout") != std::string::npos) {
-            HandleLogout();             // 登出入口
-            isJsonResponse = false;
-        } 
-        else {
-            response_.Init(srcDir, request_.path(), request_.body(), request_.header(), request_.IsKeepAlive(), 200);
-        }
-    } else if (method == "POST") {
-        if (path.find("/login") == 0 || path.find("/register") == 0) {
-            HandleUserAuth();  // 设置 path_ 和 code_
-            isJsonResponse = false;
-        } else if (path.find("/upload") == 0) {
+void HttpConn::RouteRequest()
+{
+    const auto &method = request_.method();
+    const auto &path = request_.path();
 
-            if (!ExtractLoginFromCookie()) {
-                // 未登录，直接返回 403 Forbidden
-                response_.Init(srcDir, request_.path(), request_.body(), request_.header(), false, 403);
-                response_.SetJsonResponse("请先登录后再上传文件",403);
+    LOG_INFO("Processing %s %s from client[%d]", method.c_str(), path.c_str(), fd_);
 
-                isJsonResponse = true;
-                return;
-            }
-            HandleUpload();  // 处理上传
-            isJsonResponse = true;
-        }
-    } else if (method == "DELETE" && path.find("/delete") == 0) {
-        HandleDelete();  // 设置删除路径
-        isJsonResponse = true;
-    } else {
-        response_.Init(srcDir, request_.path(), request_.body(), request_.header(), false, 400);
-    }
-}
-
-
-void HttpConn::HandleUserAuth() {
-    std::cout << "开始处理验证和注册任务...." << std::endl;
-
-    bool isLogin = (request_.path().find("/login") != std::string::npos);
-    const std::string& username = request_.GetPost("username");
-    const std::string& password = request_.GetPost("password");
-
-    std::cout << "username: " << username << std::endl;
-    std::cout << "password: " << password << std::endl;
-
-    int userID;
-    std::string token;
-    bool success = false;
-
-    if (isLogin) {
-        success = authService_->Login(username, password, token, userID);
-    } else {
-        success = authService_->Register(username, password, userID);
-    }
-
-    if (success) {
-        if (isLogin) {
-            // 登录成功 → 欢迎页面
-            request_.path() = "/welcome.html";
-        } else {
-            // 注册成功 → 回到登录页面（可以在页面上提示“注册成功，请登录”）
-            request_.path() = "/login.html";
-        }
-        response_.Init(srcDir, request_.path(), request_.body(), request_.header(), request_.IsKeepAlive(), 200);
-        ForceLoginUser(userID);
-    } else {
-        request_.path() = "/error.html";
-        response_.Init(srcDir, request_.path(), request_.body(), request_.header(), false, 400);
-    }
-}
-
-void HttpConn::HandleUpload() {
-    cout<<"开始处理上传"<<endl;
-    if (request_.GetUserID() <= 0) {
-        response_.SetJsonResponse(R"({"error":"未登录，禁止上传"})", 403);
+    // API路由处理
+    if (path.find("/api/") == 0)
+    {
+        HandleApiRequest();
         return;
     }
 
-    UploadedFile file;
-    if (request_.ParseMultipartFormData(request_.header()["Content-Type"], request_.body(), file)) {
-        if (UploadService::SaveUploadedFile(file, request_.GetUserID())) {
-            response_.SetJsonResponse(R"({"status":"success"})", 200);
-        } else {
-            response_.SetJsonResponse(R"({"error":"保存失败"})", 500);
+    // 特定功能路由
+    if (method == "GET")
+    {
+        if (path.find("/showlist") != string::npos)
+        {
+            HandleFileList();
         }
-    } else {
-        response_.SetJsonResponse(R"({"error":"上传数据解析失败"})", 400);
+        else if (path.find("/logout") != string::npos)
+        {
+            HandleLogout();
+        }
+        else
+        {
+            HandleStaticFile();
+        }
+    }
+    else if (method == "POST")
+
+    {
+        LOG_INFO("开始处理post路由");
+        if (path.find("/login") == 0 || path.find("/register") == 0)
+        {
+            LOG_INFO("login路由开始处理");
+            HandleUserAuth();
+        }
+        else if (path.find("/upload") == 0)
+        {
+            HandleUpload();
+        }
+        else
+        {
+            response_ = HttpResponse::CreateErrorResponse(404, "Not Found", &request_);
+        }
+    }
+    else if (method == "DELETE" && path.find("/delete") == 0)
+    {
+        HandleDelete();
+    }
+    else
+    {
+        response_ = HttpResponse::CreateErrorResponse(405, "Method Not Allowed", &request_);
     }
 }
 
-void HttpConn::HandleDelete() {
-    std::string filename = request_.path().substr(strlen("/delete/"));
-    bool ok = UploadService::DeleteFile(filename, request_.GetUserID());
+void HttpConn::HandleApiRequest()
+{
+    const auto &path = request_.path();
 
-    if (ok) {
-        response_.Init(srcDir, request_.path(), request_.body(), request_.header(), request_.IsKeepAlive(), 200);
-    } else {
-        response_.Init(srcDir, request_.path(), request_.body(), request_.header(), false, 400);
+    if (path == "/api/auth/status")
+    {
+        // 检查认证状态
+        nlohmann::json response;
+        response["authenticated"] = (request_.GetUserID() > 0);
+        response["user_id"] = request_.GetUserID();
+        response_ = HttpResponse::CreateJsonResponse(response, 200, &request_);
+    }
+    else
+    {
+        response_ = HttpResponse::CreateErrorResponse(404, "API endpoint not found", &request_);
     }
 }
 
-string HttpConn::GetSQLFileListJson() {
-    cout<<"数据库中读取文件信息"<<endl;
+void HttpConn::HandleStaticFile()
+{
+    response_.InitFromRequest(request_, srcDir);
+    response_.MakeResponse(writeBuff_);
+}
+
+void HttpConn::HandleUserAuth()
+{
+    bool isLogin = (request_.path().find("/login") != string::npos);
+    LOG_INFO("Header:\n");
+    for (auto &h : request_.header())
+    {
+        LOG_INFO("%s:%s",h.first.c_str(),h.second.c_str());
+    }
+    LOG_INFO("=== HandleUserAuth 调试信息 ===" );
+
+    LOG_INFO("请求体内容:%s",request_.body().c_str());
+    LOG_INFO("请求体长度:%zu",request_.body().size());
+
+
+    const string &username = request_.GetPost("username").value_or("");
+    const string &password = request_.GetPost("password").value_or("");
+
+
+    LOG_INFO("User auth: %s, username: %s", isLogin ? "login" : "register", username.c_str());
+
+    int userID = 0;
+    string token;
+    bool success = false;
+
+    if (isLogin)
+    {
+        LOG_INFO("Debug:登录成功");
+        success = authService_->Login(username, password, token, userID);
+    }
+    else
+    {
+        success = authService_->Register(username, password, userID);
+    }
+
+    if (success)
+    {
+        if (isLogin)
+        {
+            // 登录成功，设置cookie并重定向
+            ForceLoginUser(userID);
+            
+            LOG_INFO("Debug:登录和验证成功" );
+            // 方法1：使用纯重定向（推荐）
+            response_ = HttpResponse::CreateRedirectResponse("/welcome", 302, &request_);
+            // 添加Cookie设置
+            response_.AddHeader("Set-Cookie",
+                                "session_token=" + token +
+                                    "; Path=/" +
+                                    "; HttpOnly" +     // 防止XSS攻击
+                                    "; Max-Age=3600" + // 1小时过期
+                                    "; SameSite=Lax"); // CSRF保护
+
+            response_.MakeResponse(writeBuff_);
+
+            // 或者方法2：使用HTML重定向页面
+            /*
+            std::string html =
+                "<!doctype html><html><head><meta charset='utf-8'>"
+                "<meta http-equiv='refresh' content='0;url=/welcome.html'>"
+                "<title>登录成功</title></head>"
+                "<body><p>登录成功，正在跳转…</p></body></html>";
+
+            response_.SetHtmlResponse(html, 200);
+            response_.AddHeader("Refresh", "0;url=/welcome.html");
+            */
+        }
+        else
+        {
+            // 注册成功，重定向到登录页
+            response_ = HttpResponse::CreateRedirectResponse("/login", 302, &request_);
+            response_.MakeResponse(writeBuff_);
+
+            // 或者显示成功消息后重定向
+            /*
+            std::string html =
+                "<!doctype html><html><head><meta charset='utf-8'>"
+                "<meta http-equiv='refresh' content='2;url=/login.html'>"
+                "<title>注册成功</title></head>"
+                "<body><p>注册成功，2秒后跳转到登录页面…</p></body></html>";
+
+            response_.SetHtmlResponse(html, 200);
+            */
+        }
+    }
+    else
+    {
+        // 认证失败，返回JSON错误响应
+        nlohmann::json errorResponse;
+        errorResponse["error"] = isLogin ? "登录失败" : "注册失败";
+        errorResponse["message"] = "用户名或密码错误";
+
+        // 检查请求的Accept头，决定返回HTML还是JSON
+        auto acceptHeader = request_.GetHeader("Accept");
+        if (acceptHeader && acceptHeader->find("application/json") != string::npos)
+        {
+            response_ = HttpResponse::CreateJsonResponse(errorResponse, 401, &request_);
+        }
+        else
+        {
+            // 认证失败，返回HTML错误页面
+            std::string html =
+                "<!doctype html><html><head><meta charset='utf-8'>"
+                "<title>认证失败</title></head>"
+                "<body><h1>认证失败</h1><p>用户名或密码错误</p>"
+                "<p><a href='" +
+                (isLogin ? std::string("/login.html") : std::string("/register.html")) + "'>返回</a></p></body></html>";
+
+            response_.SetHtmlResponse(html, 401);
+        }
+    }
+}
+
+bool HttpConn::ExtractFileContentFromBody(const std::string &contentType,
+                                          const std::string &body,
+                                          UploadedFile &file)
+{
+    // 简单的实现 - 需要根据实际的multipart格式来完善
+    size_t filename_pos = body.find("filename=\"");
+    if (filename_pos == std::string::npos)
+    {
+        return false;
+    }
+
+    // 查找文件内容的开始位置（通常是两个CRLF之后）
+    size_t content_start = body.find("\r\n\r\n", filename_pos);
+    if (content_start == std::string::npos)
+    {
+        return false;
+    }
+    content_start += 4; // 跳过 "\r\n\r\n"
+
+    // 查找文件内容的结束位置（boundary之前）
+    size_t boundary_pos = body.find("\r\n--", content_start);
+    if (boundary_pos == std::string::npos)
+    {
+        boundary_pos = body.length();
+    }
+
+    // 提取文件内容
+    file.content = body.substr(content_start, boundary_pos - content_start);
+
+    LOG_INFO("提取的文件内容大小: %zu 字节", file.content.size());
+
+    return true;
+}
+
+void HttpConn::HandleUpload()
+{
+    if (!ExtractLoginFromCookie())
+    {
+        nlohmann::json errorResponse{
+            {"error", "未登录"},
+            {"message", "请先登录后再上传文件"}};
+        response_ = HttpResponse::CreateJsonResponse(errorResponse, 403, &request_);
+        return;
+    }
+
+    // 安全获取 Content-Type
+    auto ctOpt = request_.GetHeader("Content-Type");
+    if (!ctOpt)
+    {
+        nlohmann::json errorResponse{{"error", "缺少 Content-Type"}};
+        response_ = HttpResponse::CreateJsonResponse(errorResponse, 400, &request_);
+        return;
+    }
+    const std::string &contentType = *ctOpt;
+
+    // 检查是否是 multipart/form-data
+    if (contentType.find("multipart/form-data") == std::string::npos)
+    {
+        nlohmann::json errorResponse{{"error", "不支持的 Content-Type"}};
+        response_ = HttpResponse::CreateJsonResponse(errorResponse, 400, &request_);
+        return;
+    }
+
+    // 创建解析器和存储容器
+    MultipartFormDataParser parser;
+    std::unordered_map<std::string, std::string> formFields;
+
+    // 添加调试信息
+    LOG_INFO("=== HandleUpload 调试信息 ===");
+    LOG_INFO("Content-Type: %s", contentType.c_str());
+    LOG_INFO("请求体大小: %zu 字节", request_.body().size());
+
+    // 正确调用 Parse 函数（参数顺序：contentType, body, post, fd）
+    bool parseSuccess = parser.Parse(contentType, request_.body(), formFields, -1);
+
+    if (!parseSuccess)
+    {
+        nlohmann::json errorResponse{{"error", "文件解析失败"}};
+        response_ = HttpResponse::CreateJsonResponse(errorResponse, 400, &request_);
+        return;
+    }
+
+    // 调试输出解析结果
+    LOG_INFO("解析后的表单字段:");
+    for (const auto &field : formFields)
+    {
+        LOG_INFO("  %s: %s", field.first.c_str(), field.second.c_str());
+    }
+
+    // 检查必要的字段是否存在
+    if (formFields.find("filename") == formFields.end() || formFields["filename"].empty())
+    {
+        LOG_INFO("错误: 解析后文件名为空");
+        nlohmann::json errorResponse{{"error", "未找到文件名"}};
+        response_ = HttpResponse::CreateJsonResponse(errorResponse, 400, &request_);
+        return;
+    }
+
+    // 问题：当前的 Parse 函数没有提取文件内容！
+    // 需要修改 ParseMultipartFormData 来同时提取文件内容
+    // 临时解决方案：重新解析或修改 ParseMultipartFormData
+
+    // 创建 UploadedFile 对象（但缺少文件内容）
+    UploadedFile file;
+    file.filename = formFields["filename"];
+    file.contentType = formFields["content_type"];
+
+    // 需要从请求体中提取文件内容
+    // 这里需要调用一个能提取文件内容的函数
+    if (!ExtractFileContentFromBody(contentType, request_.body(), file))
+    {
+        nlohmann::json errorResponse{{"error", "无法提取文件内容"}};
+        response_ = HttpResponse::CreateJsonResponse(errorResponse, 400, &request_);
+        return;
+    }
+    LOG_INFO("文件内容大小: %d字节",file.content.size());
+
+
+    // 现在可以保存文件
+    if (UploadService::SaveUploadedFile(file, request_.GetUserID()))
+    {
+        nlohmann::json successResponse{
+            {"status", "success"},
+            {"filename", file.filename},
+            {"message", "文件上传成功"}};
+
+        // 同步返回其他表单字段
+        for (auto &kv : formFields)
+        {
+            if (kv.first != "filename" && kv.first != "content_type")
+            {
+                successResponse[kv.first] = kv.second;
+            }
+        }
+
+        response_ = HttpResponse::CreateJsonResponse(successResponse, 200, &request_);
+    }
+    else
+    {
+        nlohmann::json errorResponse{{"error", "文件保存失败"}};
+        response_ = HttpResponse::CreateJsonResponse(errorResponse, 500, &request_);
+    }
+}
+
+void HttpConn::HandleDelete()
+{
+    if (!ExtractLoginFromCookie())
+    {
+        nlohmann::json errorResponse;
+        errorResponse["error"] = "未登录";
+        response_ = HttpResponse::CreateJsonResponse(errorResponse, 403, &request_);
+        return;
+    }
+
+    string filename = request_.path().substr(strlen("/delete/"));
+    bool success = UploadService::DeleteFile(filename, request_.GetUserID());
+
+    if (success)
+    {
+        nlohmann::json successResponse;
+        successResponse["status"] = "success";
+        successResponse["message"] = "文件删除成功";
+        response_ = HttpResponse::CreateJsonResponse(successResponse, 200, &request_);
+    }
+    else
+    {
+        nlohmann::json errorResponse;
+        errorResponse["error"] = "删除失败";
+        errorResponse["message"] = "文件不存在或没有权限";
+        response_ = HttpResponse::CreateJsonResponse(errorResponse, 404, &request_);
+    }
+}
+
+void HttpConn::HandleFileList()
+{
+    LOG_INFO("打印文件列表" );
+    if (!ExtractLoginFromCookie())
+    {
+        nlohmann::json errorResponse;
+        errorResponse["error"] = "未登录";
+        response_ = HttpResponse::CreateJsonResponse(errorResponse, 403, &request_);
+        return;
+    }
+
     nlohmann::json jsonResponse;
+    vector<UploadedFileInfo> fileInfos = UploadService::QueryAllFiles(request_.GetUserID());
 
-    int currentUserId = request_.GetUserID();
-    if (currentUserId <= 0) {
-        std::cout << "未登录用户尝试获取文件列表" << std::endl;
-        return R"({"error": "未登录"})";  // 保险：不应该到这一步
-    }
-
-    // 只查询当前用户的文件
-    std::vector<UploadedFileInfo> fileInfos = UploadService::QueryAllFiles(currentUserId);
-
-    // 将每个文件信息转换为 JSON 格式
-    for (const auto& file : fileInfos) {
+    for (const auto &file : fileInfos)
+    {
         nlohmann::json fileJson;
         fileJson["filename"] = file.original_filename;
         fileJson["upload_time"] = file.upload_time;
@@ -300,90 +595,98 @@ string HttpConn::GetSQLFileListJson() {
         jsonResponse.push_back(fileJson);
     }
 
-    std::string jsonStr = jsonResponse.dump();
-    cout<<jsonStr<<endl;
-    return jsonStr; 
+    response_ = HttpResponse::CreateJsonResponse(jsonResponse, 200, &request_);
+    response_.MakeResponse(writeBuff_);
 }
 
-bool HttpConn::ExtractLoginFromCookie() {
-    std::cout << "正在进行 Cookie 验证..." << std::endl;
+void HttpConn::HandleLogout()
+{
+    string cookie = request_.header().count("Cookie") ? request_.header().at("Cookie") : "";
+    string token = ParseTokenFromCookie(cookie);
 
+    if (!token.empty())
+    {
+        RedisSessionManager().DeleteSession(token);
+    }
+
+    // 清除cookie并重定向到登录页
+    response_ = HttpResponse::CreateRedirectResponse("/login.html", 302, &request_);
+    response_.RemoveCookie("token");
+}
+
+bool HttpConn::ExtractLoginFromCookie()
+{
     auto it = request_.header().find("Cookie");
-    if (it == request_.header().end()) {
-        std::cout << "没有 Cookie 请求头，用户未登录。" << std::endl;
+    if (it == request_.header().end())
+    {
+        LOG_INFO("No cookie found for client[%d]", fd_);
         return false;
     }
 
-    std::string rawCookie = it->second;
-    std::cout << "收到 Cookie: " << rawCookie << std::endl;
-
-    std::string token = ParseTokenFromCookie(rawCookie);
-    if (token.empty()) {
-        std::cout << "Cookie 中未找到 token。" << std::endl;
+    string token = ParseTokenFromCookie(it->second);
+    if (token.empty())
+    {
+        LOG_INFO("No token found in cookie for client[%d]", fd_);
         return false;
     }
-
-    std::cout << "提取的 token: " << token << std::endl;
 
     int userID = 0;
-    if (authService_ && authService_->VerifyToken(token, userID)) {
+    if (authService_ && authService_->VerifyToken(token, userID))
+    {
         request_.SetUserID(userID);
-        std::cout << "登录验证成功，userID = " << userID << std::endl;
+        LOG_INFO("User authenticated: userID=%d", userID);
         return true;
     }
 
-    std::cout << "token 无效，无法匹配 Redis 中的用户。" << std::endl;
+    LOG_INFO("Invalid token for client[%d]", fd_);
     return false;
 }
 
-string HttpConn::ParseTokenFromCookie(const std::string& cookieStr) {
-    std::istringstream ss(cookieStr);
-    std::string item;
-    while (std::getline(ss, item, ';')) {
-        // 去除前导空格
-        size_t start = item.find_first_not_of(" ");
-        if (start == std::string::npos) continue;
-        item = item.substr(start);
+string HttpConn::ParseTokenFromCookie(const string &cookieStr)
+{
+    istringstream ss(cookieStr);
+    string item;
 
-        // 查找 token= 开头
-        if (item.find("token=") == 0) {
-            return item.substr(strlen("token="));  // 提取等号后面的 token 值
+    while (getline(ss, item, ';'))
+    {
+        size_t start = item.find_first_not_of(" ");
+        if (start == string::npos)
+            continue;
+
+        item = item.substr(start);
+        if (item.find("session_token=") == 0)
+        {
+            return item.substr(strlen("session_token="));
         }
     }
-    return "";  // 没有找到 token
+
+    return "";
 }
 
-void HttpConn::HandleLogout() {
-    std::string cookie = request_.header()["Cookie"];
-    std::string token = ParseTokenFromCookie(cookie);
-    RedisSessionManager().DeleteSession(token);
-    request_.path_ = "/login.html";
-    response_.Init(srcDir, request_.path(), request_.body(), request_.header(), false, 200);
-    response_.AddHeader("Set-Cookie", "token=; Max-Age=0; Path=/; HttpOnly");
-}
+bool HttpConn::IsStaticResource(const string &path)
+{
+    static const vector<string> exts = {
+        ".js", ".css", ".html", ".htm", ".png", ".jpg", ".jpeg",
+        ".gif", ".svg", ".woff", ".ttf", ".ico", ".txt", ".pdf"};
 
-bool HttpConn::IsStaticResource(const std::string& path) {
-    static const std::vector<std::string> exts = {
-        ".js", ".css", ".html", ".png", ".jpg", ".jpeg", ".gif", ".svg", ".woff", ".ttf", ".ico"
-    };
-    for (const auto& ext : exts) {
+    for (const auto &ext : exts)
+    {
         if (path.size() >= ext.size() &&
-            path.compare(path.size() - ext.size(), ext.size(), ext) == 0) {
+            path.compare(path.size() - ext.size(), ext.size(), ext) == 0)
+        {
             return true;
         }
     }
+
     return false;
 }
 
-void HttpConn::ForceLoginUser(int userID) {
-    cout<<"设置token"<<endl;
-    // 清除旧 cookie
-    response_.AddHeader("Set-Cookie", "token=; Path=/; Max-Age=0; HttpOnly");
-
-    // 设置新 cookie
-    std::string token = RedisSessionManager().CreateSession(userID, 3600);
-    cout<<"token:"<<token<<endl;
-    response_.AddHeader("Set-Cookie", "token=" + token + "; Path=/; HttpOnly");
-
+void HttpConn::ForceLoginUser(int userID)
+{
+    string token = RedisSessionManager().CreateSession(userID, 3600);
     request_.SetUserID(userID);
+
+    // 设置cookie
+    response_.SetCookie("token", token, "/", 3600, true, false);
+    LOG_INFO("User %d logged in, token set", userID);
 }

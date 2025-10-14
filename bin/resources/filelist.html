@@ -155,27 +155,22 @@
             setupEventListeners();
         });
 
-        // 加载文件列表
         async function loadFileList() {
             try {
                 const response = await fetch(`${API_BASE}/showlist`, {
-                    credentials: 'include' // ✅ 记得带上 cookie
+                    credentials: 'include' // 确保带上 cookie
                 });
 
-                if (response.status === 403) {
-                    // ❌ 未登录：跳转或提示
-                    Swal.fire('未登录', '请先登录后再查看文件列表', 'warning').then(() => {
-                        window.location.href = '/login'; // 或跳回首页 '/'
-                    });
-                    return;
+                // 检查响应的 Content-Type 是否为 application/json
+                const contentType = response.headers.get('Content-Type');
+                if (contentType && contentType.includes('application/json')) {
+                    const files = await response.json();
+                    renderFileList(files);
+                } else {
+                    throw new Error('响应不是 JSON 格式');
                 }
-
-                if (!response.ok) throw new Error('获取文件列表失败');
-
-                const files = await response.json();
-                renderFileList(files);
             } catch (error) {
-                console.error('Error:', error);
+                console.error('加载文件列表失败:', error);
                 Swal.fire('错误', '加载文件列表失败', 'error');
             }
         }

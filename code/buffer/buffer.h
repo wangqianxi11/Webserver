@@ -25,6 +25,12 @@ public:
     size_t WritableBytes() const;       
     size_t ReadableBytes() const ;
     size_t PrependableBytes() const;
+        // 加一个清空方法
+    void Clear() {
+            buffer_.clear();
+            readPos_ = 0;
+            writePos_ = 0;
+    }
 
     const char* Peek() const;
     void EnsureWriteable(size_t len);

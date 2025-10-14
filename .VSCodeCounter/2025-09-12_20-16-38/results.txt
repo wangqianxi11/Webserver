@@ -1,0 +1,125 @@
+Date : 2025-09-12 20:16:38
+Directory : /home/wang/C++Project/WebServer
+Total : 73 files,  9210 codes, 852 comments, 1605 blanks, all 11667 lines
+
+Languages
++------------+------------+------------+------------+------------+------------+
+| language   | files      | code       | comment    | blank      | total      |
++------------+------------+------------+------------+------------+------------+
+| CSS        |          5 |      3,451 |         66 |        666 |      4,183 |
+| C++        |         32 |      2,584 |        481 |        548 |      3,613 |
+| HTML       |         17 |      1,885 |        173 |        301 |      2,359 |
+| XML        |          1 |        655 |          0 |          0 |        655 |
+| C          |          2 |        412 |         73 |         38 |        523 |
+| Markdown   |          6 |        120 |         12 |         14 |        146 |
+| JavaScript |          7 |         60 |         45 |         20 |        125 |
+| Makefile   |          3 |         43 |          2 |         18 |         63 |
++------------+------------+------------+------------+------------+------------+
+
+Directories
++-------------------------------------------------------------------------------+------------+------------+------------+------------+------------+
+| path                                                                          | files      | code       | comment    | blank      | total      |
++-------------------------------------------------------------------------------+------------+------------+------------+------------+------------+
+| .                                                                             |         73 |      9,210 |        852 |      1,605 |     11,667 |
+| . (Files)                                                                     |          2 |        119 |          7 |         14 |        140 |
+| bin                                                                           |         30 |      6,051 |        284 |        987 |      7,322 |
+| bin/resources                                                                 |         30 |      6,051 |        284 |        987 |      7,322 |
+| bin/resources (Files)                                                         |         16 |      1,597 |        157 |        266 |      2,020 |
+| bin/resources/api                                                             |          1 |        288 |         16 |         35 |        339 |
+| bin/resources/api/files                                                       |          1 |        288 |         16 |         35 |        339 |
+| bin/resources/css                                                             |          5 |      3,451 |         66 |        666 |      4,183 |
+| bin/resources/fonts                                                           |          1 |        655 |          0 |          0 |        655 |
+| bin/resources/js                                                              |          7 |         60 |         45 |         20 |        125 |
+| build                                                                         |          1 |         10 |          0 |          8 |         18 |
+| code                                                                          |         37 |      2,588 |        486 |        549 |      3,623 |
+| code (Files)                                                                  |          2 |         11 |          7 |          3 |         21 |
+| code/buffer                                                                   |          2 |        159 |         90 |         51 |        300 |
+| code/config                                                                   |          1 |          0 |          5 |          1 |          6 |
+| code/http                                                                     |          7 |      1,080 |        115 |        185 |      1,380 |
+| code/log                                                                      |          4 |        358 |         58 |         83 |        499 |
+| code/pool                                                                     |          5 |        170 |         36 |         36 |        242 |
+| code/processing                                                               |          9 |        306 |         70 |         84 |        460 |
+| code/server                                                                   |          4 |        362 |         71 |         77 |        510 |
+| code/timer                                                                    |          3 |        142 |         34 |         29 |        205 |
+| webbench-1.5                                                                  |          3 |        442 |         75 |         47 |        564 |
++-------------------------------------------------------------------------------+------------+------------+------------+------------+------------+
+
+Files
++-------------------------------------------------------------------------------+------------+------------+------------+------------+------------+
+| filename                                                                      | language   | code       | comment    | blank      | total      |
++-------------------------------------------------------------------------------+------------+------------+------------+------------+------------+
+| /home/wang/C++Project/WebServer/Makefile                                      | Makefile   |          3 |          0 |          1 |          4 |
+| /home/wang/C++Project/WebServer/README.md                                     | Markdown   |        116 |          7 |         13 |        136 |
+| /home/wang/C++Project/WebServer/bin/resources/400.html                        | HTML       |         61 |         11 |         13 |         85 |
+| /home/wang/C++Project/WebServer/bin/resources/403.html                        | HTML       |         61 |         11 |         13 |         85 |
+| /home/wang/C++Project/WebServer/bin/resources/404.html                        | HTML       |         61 |         11 |         13 |         85 |
+| /home/wang/C++Project/WebServer/bin/resources/405.html                        | HTML       |         61 |         11 |         13 |         85 |
+| /home/wang/C++Project/WebServer/bin/resources/api/files/upload.html           | HTML       |        288 |         16 |         35 |        339 |
+| /home/wang/C++Project/WebServer/bin/resources/css/animate.css                 | CSS        |      2,655 |         10 |        494 |      3,159 |
+| /home/wang/C++Project/WebServer/bin/resources/css/bootstrap.min.css           | CSS        |          1 |          5 |          0 |          6 |
+| /home/wang/C++Project/WebServer/bin/resources/css/font-awesome.min.css        | CSS        |          1 |          3 |          1 |          5 |
+| /home/wang/C++Project/WebServer/bin/resources/css/magnific-popup.css          | CSS        |        310 |          6 |         36 |        352 |
+| /home/wang/C++Project/WebServer/bin/resources/css/style.css                   | CSS        |        484 |         42 |        135 |        661 |
+| /home/wang/C++Project/WebServer/bin/resources/error.html                      | HTML       |         61 |         12 |         22 |         95 |
+| /home/wang/C++Project/WebServer/bin/resources/fileitem.html                   | HTML       |        289 |         19 |         35 |        343 |
+| /home/wang/C++Project/WebServer/bin/resources/filelist.html                   | HTML       |        370 |          9 |         51 |        430 |
+| /home/wang/C++Project/WebServer/bin/resources/fonts/fontawesome-webfont.svg   | XML        |        655 |          0 |          0 |        655 |
+| /home/wang/C++Project/WebServer/bin/resources/index.html                      | HTML       |        130 |          6 |         27 |        163 |
+| /home/wang/C++Project/WebServer/bin/resources/js/bootstrap.min.js             | JavaScript |          2 |          5 |          0 |          7 |
+| /home/wang/C++Project/WebServer/bin/resources/js/custom.js                    | JavaScript |         26 |          4 |         11 |         41 |
+| /home/wang/C++Project/WebServer/bin/resources/js/jquery.js                    | JavaScript |          3 |          1 |          0 |          4 |
+| /home/wang/C++Project/WebServer/bin/resources/js/jquery.magnific-popup.min.js | JavaScript |          1 |          3 |          0 |          4 |
+| /home/wang/C++Project/WebServer/bin/resources/js/magnific-popup-options.js    | JavaScript |         21 |          7 |          5 |         33 |
+| /home/wang/C++Project/WebServer/bin/resources/js/smoothscroll.js              | JavaScript |          6 |         24 |          4 |         34 |
+| /home/wang/C++Project/WebServer/bin/resources/js/wow.min.js                   | JavaScript |          1 |          1 |          0 |          2 |
+| /home/wang/C++Project/WebServer/bin/resources/login.html                      | HTML       |         55 |         10 |         13 |         78 |
+| /home/wang/C++Project/WebServer/bin/resources/picture.html                    | HTML       |        109 |         11 |         18 |        138 |
+| /home/wang/C++Project/WebServer/bin/resources/register.html                   | HTML       |         53 |         10 |          9 |         72 |
+| /home/wang/C++Project/WebServer/bin/resources/showlist.html                   | HTML       |          1 |          0 |          2 |          3 |
+| /home/wang/C++Project/WebServer/bin/resources/template.html                   | HTML       |         61 |          8 |          6 |         75 |
+| /home/wang/C++Project/WebServer/bin/resources/upload.html                     | HTML       |         64 |         15 |          6 |         85 |
+| /home/wang/C++Project/WebServer/bin/resources/video.html                      | HTML       |         71 |          5 |          7 |         83 |
+| /home/wang/C++Project/WebServer/bin/resources/welcome.html                    | HTML       |         89 |          8 |         18 |        115 |
+| /home/wang/C++Project/WebServer/build/Makefile                                | Makefile   |         10 |          0 |          8 |         18 |
+| /home/wang/C++Project/WebServer/code/buffer/buffer.cpp                        | C++        |        115 |         85 |         40 |        240 |
+| /home/wang/C++Project/WebServer/code/buffer/buffer.h                          | C++        |         44 |          5 |         11 |         60 |
+| /home/wang/C++Project/WebServer/code/config/config.h                          | C++        |          0 |          5 |          1 |          6 |
+| /home/wang/C++Project/WebServer/code/http/httpconn.cpp                        | C++        |        304 |         30 |         55 |        389 |
+| /home/wang/C++Project/WebServer/code/http/httpconn.h                          | C++        |         70 |          5 |         25 |        100 |
+| /home/wang/C++Project/WebServer/code/http/httprequest.cpp                     | C++        |        350 |         40 |         62 |        452 |
+| /home/wang/C++Project/WebServer/code/http/httprequest.h                       | C++        |         79 |         10 |          9 |         98 |
+| /home/wang/C++Project/WebServer/code/http/httpresponse.cpp                    | C++        |        228 |         20 |         25 |        273 |
+| /home/wang/C++Project/WebServer/code/http/httpresponse.h                      | C++        |         48 |          5 |          9 |         62 |
+| /home/wang/C++Project/WebServer/code/http/readme.md                           | Markdown   |          1 |          5 |          0 |          6 |
+| /home/wang/C++Project/WebServer/code/log/blockqueue.h                         | C++        |        139 |         22 |         39 |        200 |
+| /home/wang/C++Project/WebServer/code/log/log.cpp                              | C++        |        159 |         31 |         27 |        217 |
+| /home/wang/C++Project/WebServer/code/log/log.h                                | C++        |         60 |          5 |         16 |         81 |
+| /home/wang/C++Project/WebServer/code/log/readme.md                            | Markdown   |          0 |          0 |          1 |          1 |
+| /home/wang/C++Project/WebServer/code/main.cpp                                 | C++        |         10 |          7 |          3 |         20 |
+| /home/wang/C++Project/WebServer/code/pool/readme.md                           | Markdown   |          1 |          0 |          0 |          1 |
+| /home/wang/C++Project/WebServer/code/pool/sqlconnRAII.h                       | C++        |         18 |          8 |          7 |         33 |
+| /home/wang/C++Project/WebServer/code/pool/sqlconnpool.cpp                     | C++        |         65 |         18 |         11 |         94 |
+| /home/wang/C++Project/WebServer/code/pool/sqlconnpool.h                       | C++        |         30 |          5 |          9 |         44 |
+| /home/wang/C++Project/WebServer/code/pool/threadpool.h                        | C++        |         56 |          5 |          9 |         70 |
+| /home/wang/C++Project/WebServer/code/processing/AuthService.cpp               | C++        |         36 |          7 |          7 |         50 |
+| /home/wang/C++Project/WebServer/code/processing/AuthService.h                 | C++        |         14 |          7 |          3 |         24 |
+| /home/wang/C++Project/WebServer/code/processing/RedisSessionManager .h        | C++        |         16 |          7 |          9 |         32 |
+| /home/wang/C++Project/WebServer/code/processing/RedisSessionManager.cpp       | C++        |         33 |          7 |          8 |         48 |
+| /home/wang/C++Project/WebServer/code/processing/UserService.cpp               | C++        |         53 |          7 |         16 |         76 |
+| /home/wang/C++Project/WebServer/code/processing/UserService.h                 | C++        |         14 |         11 |          4 |         29 |
+| /home/wang/C++Project/WebServer/code/processing/uploaded_file.h               | C++        |          7 |          7 |          2 |         16 |
+| /home/wang/C++Project/WebServer/code/processing/uploadservice.cpp             | C++        |        113 |         10 |         33 |        156 |
+| /home/wang/C++Project/WebServer/code/processing/uploadservice.h               | C++        |         20 |          7 |          2 |         29 |
+| /home/wang/C++Project/WebServer/code/readme.md                                | Markdown   |          1 |          0 |          0 |          1 |
+| /home/wang/C++Project/WebServer/code/server/epoller.cpp                       | C++        |         35 |         13 |          9 |         57 |
+| /home/wang/C++Project/WebServer/code/server/epoller.h                         | C++        |         23 |          5 |         12 |         40 |
+| /home/wang/C++Project/WebServer/code/server/webserver.cpp                     | C++        |        249 |         48 |         39 |        336 |
+| /home/wang/C++Project/WebServer/code/server/webserver.h                       | C++        |         55 |          5 |         17 |         77 |
+| /home/wang/C++Project/WebServer/code/timer/heaptimer.cpp                      | C++        |         98 |         22 |         11 |        131 |
+| /home/wang/C++Project/WebServer/code/timer/heaptimer.h                        | C++        |         43 |         12 |         18 |         73 |
+| /home/wang/C++Project/WebServer/code/timer/readme.md                          | Markdown   |          1 |          0 |          0 |          1 |
+| /home/wang/C++Project/WebServer/webbench-1.5/Makefile                         | Makefile   |         30 |          2 |          9 |         41 |
+| /home/wang/C++Project/WebServer/webbench-1.5/socket.c                         | C          |         41 |         20 |          8 |         69 |
+| /home/wang/C++Project/WebServer/webbench-1.5/webbench.c                       | C          |        371 |         53 |         30 |        454 |
+| Total                                                                         |            |      9,210 |        852 |      1,605 |     11,667 |
++-------------------------------------------------------------------------------+------------+------------+------------+------------+------------+
